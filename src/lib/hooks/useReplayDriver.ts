@@ -19,7 +19,13 @@ export function useReplayDriver(): void {
     const unsub = useReplayStore.subscribe(
       (s) => s.cursor,
       (cursor) => {
-        const { baseSeries } = useReplayStore.getState();
+        const state = useReplayStore.getState();
+        // In live mode the live feed owns bar delivery to the engine.
+        if (state.mode === "live") {
+          lastFedCursor.current = cursor;
+          return;
+        }
+        const { baseSeries } = state;
         const onBar = useTradingStore.getState().onBar;
         // Replay rewind: reset the fed marker so we don't double-process.
         if (cursor < lastFedCursor.current) {
@@ -43,6 +49,7 @@ export function useReplayDriver(): void {
     const intervalMs = Math.max(16, 1000 / speed);
     const timer = setInterval(() => {
       const state = useReplayStore.getState();
+      if (state.mode === "live") return; // live feed advances bars itself
       if (state.cursor >= state.baseSeries.length - 1) {
         state.pause();
         return;

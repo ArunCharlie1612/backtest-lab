@@ -8,7 +8,9 @@ import { useDrawingStore } from "@/lib/store/useDrawingStore";
 export function SettingsPanel() {
   const startingEquity = useTradingStore((s) => s.startingEquity);
   const costs = useTradingStore((s) => s.costs);
+  const leverage = useTradingStore((s) => s.leverage);
   const setStartingEquity = useTradingStore((s) => s.setStartingEquity);
+  const setLeverage = useTradingStore((s) => s.setLeverage);
   const setCosts = useTradingStore((s) => s.setCosts);
   const resetSession = useTradingStore((s) => s.resetSession);
   const clearDrawings = useDrawingStore((s) => s.clear);
@@ -37,6 +39,15 @@ export function SettingsPanel() {
         type="number"
         value={startingEquity}
         onChange={(e) => setStartingEquity(Number(e.target.value))}
+      />
+
+      <label className="label">Leverage (1:N)</label>
+      <input
+        className="input mb-2"
+        type="number"
+        step="1"
+        value={leverage}
+        onChange={(e) => setLeverage(Number(e.target.value))}
       />
 
       <div className="grid grid-cols-3 gap-2">

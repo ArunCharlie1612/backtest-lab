@@ -4,6 +4,7 @@ import type { Candle, Timeframe } from "../domain/types";
 import { aggregate, indexAtOrBefore } from "../data/aggregation";
 
 export type ReplayStatus = "idle" | "playing" | "paused" | "finished";
+export type MarketMode = "replay" | "live";
 
 /**
  * Deterministic replay state machine.
@@ -19,6 +20,8 @@ export interface ReplayState {
   /** Index of the last revealed base bar (−1 = nothing revealed yet). */
   cursor: number;
   status: ReplayStatus;
+  /** Replay vs live-streaming mode. */
+  mode: MarketMode;
   /** Replay speed multiplier (0.1x – 10x). */
   speed: number;
   /** Active chart timeframe. */
@@ -29,6 +32,15 @@ export interface ReplayState {
   // --- lifecycle ---
   load: (symbol: string, baseSeries: Candle[], warmupBars?: number) => void;
   reset: () => void;
+
+  // --- mode ---
+  setMode: (mode: MarketMode) => void;
+  /**
+   * Ingest a live 1-minute bar. Updates the forming bar in place, or appends a
+   * new bar when `closed` is true / the bucket advances. Keeps the cursor at the
+   * head so the full series stays revealed in live mode.
+   */
+  liveTick: (bar: Candle, closed: boolean) => void;
 
   // --- transport controls ---
   play: () => void;
@@ -56,6 +68,7 @@ export const useReplayStore = create<ReplayState>()(
     baseSeries: [],
     cursor: -1,
     status: "idle",
+    mode: "replay",
     speed: 1,
     timeframe: "15m",
     tick: 0,
@@ -117,6 +130,33 @@ export const useReplayStore = create<ReplayState>()(
     setSpeed: (speed) => set({ speed: clampSpeed(speed) }),
 
     setTimeframe: (tf) => set({ timeframe: tf, tick: get().tick + 1 }),
+
+    setMode: (mode) => {
+      // Entering live reveals the whole series; leaving pauses the clock.
+      const { baseSeries } = get();
+      set({
+        mode,
+        status: mode === "live" ? "playing" : "paused",
+        cursor: mode === "live" ? baseSeries.length - 1 : get().cursor,
+        tick: get().tick + 1,
+      });
+    },
+
+    liveTick: (bar, closed) => {
+      const { baseSeries } = get();
+      const last = baseSeries[baseSeries.length - 1];
+      let next: Candle[];
+      if (last && last.time === bar.time) {
+        next = baseSeries.slice(0, -1);
+        next.push(bar);
+      } else if (!last || bar.time > last.time) {
+        next = [...baseSeries, bar];
+      } else {
+        return; // stale/out-of-order tick
+      }
+      set({ baseSeries: next, cursor: next.length - 1, tick: get().tick + 1 });
+      void closed;
+    },
 
     // --- derived selectors ---
     visibleBase: () => {

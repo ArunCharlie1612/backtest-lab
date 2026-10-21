@@ -32,6 +32,8 @@ export interface SubmitOrderInput {
 export interface TradingState {
   activeSymbol: string;
   startingEquity: number;
+  /** Account leverage (e.g. 100 = 1% margin requirement). */
+  leverage: number;
   costs: SimulationCosts;
   orders: OrderRequest[];
   positions: Position[];
@@ -39,6 +41,7 @@ export interface TradingState {
 
   setActiveSymbol: (symbol: string) => void;
   setStartingEquity: (equity: number) => void;
+  setLeverage: (leverage: number) => void;
   setCosts: (costs: Partial<SimulationCosts>) => void;
   submitOrder: (input: SubmitOrderInput) => void;
   cancelOrder: (id: string) => void;
@@ -61,6 +64,9 @@ export interface TradingState {
   realizedPnl: () => number;
   floatingPnlTotal: (price: number) => number;
   equity: (price: number) => number;
+  marginUsed: (price: number) => number;
+  freeMargin: (price: number) => number;
+  marginLevel: (price: number) => number;
 }
 
 const DEFAULT_COSTS: SimulationCosts = {
@@ -72,6 +78,7 @@ const DEFAULT_COSTS: SimulationCosts = {
 export const useTradingStore = create<TradingState>((set, get) => ({
   activeSymbol: "EURUSD",
   startingEquity: 10_000,
+  leverage: 100,
   costs: DEFAULT_COSTS,
   orders: [],
   positions: [],
@@ -80,6 +87,8 @@ export const useTradingStore = create<TradingState>((set, get) => ({
   setActiveSymbol: (symbol) => set({ activeSymbol: symbol }),
 
   setStartingEquity: (equity) => set({ startingEquity: Math.max(0, equity) }),
+
+  setLeverage: (leverage) => set({ leverage: Math.max(1, Math.round(leverage)) }),
 
   setCosts: (costs) => set({ costs: { ...get().costs, ...costs } }),
 
@@ -155,4 +164,21 @@ export const useTradingStore = create<TradingState>((set, get) => ({
 
   equity: (price) =>
     get().startingEquity + get().realizedPnl() + get().floatingPnlTotal(price),
+
+  marginUsed: (price) => {
+    const lev = Math.max(1, get().leverage);
+    const used = get().positions.reduce((a, p) => {
+      const spec = getInstrument(p.symbol);
+      const notional = (price || p.entryPrice) * spec.contractSize * p.lots;
+      return a + notional / lev;
+    }, 0);
+    return Math.round(used * 100) / 100;
+  },
+
+  freeMargin: (price) => Math.round((get().equity(price) - get().marginUsed(price)) * 100) / 100,
+
+  marginLevel: (price) => {
+    const used = get().marginUsed(price);
+    return used > 0 ? Math.round((get().equity(price) / used) * 10000) / 100 : 0;
+  },
 }));

@@ -32,6 +32,7 @@ export function ReplayControls() {
   const status = useReplayStore((s) => s.status);
   const speed = useReplayStore((s) => s.speed);
   const timeframe = useReplayStore((s) => s.timeframe);
+  const mode = useReplayStore((s) => s.mode);
   const tick = useReplayStore((s) => s.tick);
 
   const play = useReplayStore((s) => s.play);
@@ -49,6 +50,7 @@ export function ReplayControls() {
   const series = useReplayStore.getState().baseSeries;
 
   const isPlaying = status === "playing";
+  const isLive = mode === "live";
 
   const onScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
     const pct = Number(e.target.value) / 1000;
@@ -60,20 +62,21 @@ export function ReplayControls() {
   return (
     <div className="flex flex-col gap-2 border-t border-border bg-panel px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn" onClick={() => stepBackward(1)} title="Step back 1 bar">
+        <button className="btn" onClick={() => stepBackward(1)} title="Step back 1 bar" disabled={isLive}>
           <StepBack size={16} />
         </button>
         <button
           className="btn btn-accent"
           onClick={() => (isPlaying ? pause() : play())}
           title={isPlaying ? "Pause" : "Play"}
+          disabled={isLive}
         >
           {isPlaying ? <Pause size={16} /> : <Play size={16} />}
         </button>
-        <button className="btn" onClick={() => stepForward(1)} title="Step forward 1 bar">
+        <button className="btn" onClick={() => stepForward(1)} title="Step forward 1 bar" disabled={isLive}>
           <StepForward size={16} />
         </button>
-        <button className="btn" onClick={() => stepForward(10)} title="Skip 10 bars">
+        <button className="btn" onClick={() => stepForward(10)} title="Skip 10 bars" disabled={isLive}>
           <SkipForward size={16} />
         </button>
 
@@ -83,6 +86,7 @@ export function ReplayControls() {
             className="select"
             value={speed}
             onChange={(e) => setSpeed(Number(e.target.value))}
+            disabled={isLive}
           >
             {SPEEDS.map((s) => (
               <option key={s} value={s}>
@@ -105,7 +109,13 @@ export function ReplayControls() {
         </div>
 
         <div className="ml-auto text-xs tabular-nums text-slate-400">
-          {currentTime ? formatClock(currentTime) : "—"}
+          {isLive ? (
+            <span className="font-semibold text-down">● LIVE</span>
+          ) : currentTime ? (
+            formatClock(currentTime)
+          ) : (
+            "—"
+          )}
         </div>
       </div>
 
@@ -115,7 +125,8 @@ export function ReplayControls() {
         max={1000}
         value={Math.round(progress * 1000)}
         onChange={onScrub}
-        className="w-full accent-accent"
+        disabled={isLive}
+        className="w-full accent-accent disabled:opacity-40"
       />
     </div>
   );

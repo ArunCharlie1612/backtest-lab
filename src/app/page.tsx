@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { XCircle } from "lucide-react";
+import { XCircle, CalendarDays, Radio } from "lucide-react";
 import { Chart } from "@/components/Chart";
 import { ReplayControls } from "@/components/ReplayControls";
 import { DrawingToolbar } from "@/components/DrawingToolbar";
@@ -11,14 +11,17 @@ import { CsvImport } from "@/components/CsvImport";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { EquityCurve } from "@/components/EquityCurve";
 import { TradeJournal } from "@/components/TradeJournal";
+import { CalendarView } from "@/components/CalendarView";
 import { useReplayDriver } from "@/lib/hooks/useReplayDriver";
 import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { useLocalPersistence } from "@/lib/hooks/useLocalPersistence";
 import { useTradeSnapshots } from "@/lib/hooks/useTradeSnapshots";
+import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
 import { useReplayStore } from "@/lib/store/useReplayStore";
 import { useTradingStore } from "@/lib/store/useTradingStore";
 import { generateSampleSeries } from "@/lib/data/sampleData";
 import { INSTRUMENTS } from "@/lib/domain/instruments";
+import { supportsLive } from "@/lib/live/binanceSocket";
 import type { Candle } from "@/lib/domain/types";
 
 const SYMBOLS = Object.keys(INSTRUMENTS);
@@ -41,9 +44,12 @@ export default function Home() {
   useKeyboardShortcuts();
   useLocalPersistence();
   useTradeSnapshots();
+  useLiveFeed();
 
   const load = useReplayStore((s) => s.load);
   const setTimeframe = useReplayStore((s) => s.setTimeframe);
+  const mode = useReplayStore((s) => s.mode);
+  const setMode = useReplayStore((s) => s.setMode);
   const setActiveSymbol = useTradingStore((s) => s.setActiveSymbol);
   const closeAll = useTradingStore((s) => s.closeAll);
   const positionsCount = useTradingStore((s) => s.positions.length);
@@ -52,11 +58,15 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState<"live" | "demo">("demo");
   const [barsCount, setBarsCount] = useState(0);
+  const [showCalendar, setShowCalendar] = useState(false);
+
+  const liveAvailable = supportsLive(symbol);
 
   useEffect(() => {
     let cancelled = false;
     const warmupFor = (len: number) => Math.min(300, Math.max(20, Math.floor(len / 4)));
     setLoading(true);
+    useReplayStore.getState().setMode("replay");
     useTradingStore.getState().clearWorkingState();
 
     void (async () => {
@@ -115,6 +125,35 @@ export default function Home() {
             </option>
           ))}
         </select>
+
+        {/* Replay / Live mode toggle */}
+        <div className="flex items-center overflow-hidden rounded-md border border-border text-xs">
+          <button
+            className={`px-2.5 py-1 ${mode === "replay" ? "bg-accent text-white" : "text-slate-400 hover:bg-panelAlt"}`}
+            onClick={() => setMode("replay")}
+          >
+            Replay
+          </button>
+          <button
+            className={`flex items-center gap-1 px-2.5 py-1 ${
+              mode === "live" ? "bg-down text-white" : "text-slate-400 hover:bg-panelAlt"
+            } disabled:opacity-40`}
+            disabled={!liveAvailable}
+            title={liveAvailable ? "Stream live Binance ticks" : "Live streaming available for crypto symbols"}
+            onClick={() => setMode("live")}
+          >
+            <Radio size={12} className={mode === "live" ? "animate-pulse" : ""} /> Live
+          </button>
+        </div>
+
+        <button
+          className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-slate-400 hover:text-accent"
+          onClick={() => setShowCalendar(true)}
+          title="Trading calendar"
+        >
+          <CalendarDays size={13} /> Calendar
+        </button>
+
         <button
           className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-slate-400 hover:text-down disabled:opacity-40"
           onClick={onCloseAll}
@@ -123,18 +162,24 @@ export default function Home() {
           <XCircle size={13} /> Close all ({positionsCount})
         </button>
         <div className="ml-auto flex items-center gap-3">
-          <span
-            className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-              loading
-                ? "bg-panelAlt text-slate-400"
-                : source === "live"
-                  ? "bg-up/20 text-up"
-                  : "bg-panelAlt text-slate-400"
-            }`}
-            title={source === "live" ? "Latest market data (Binance / Yahoo)" : "Synthetic demo data"}
-          >
-            {loading ? "Loading…" : source === "live" ? `● Live · ${barsCount} bars` : "● Demo data"}
-          </span>
+          {mode === "live" ? (
+            <span className="flex items-center gap-1 rounded bg-down/20 px-2 py-0.5 text-[10px] font-semibold text-down">
+              <Radio size={11} className="animate-pulse" /> STREAMING
+            </span>
+          ) : (
+            <span
+              className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
+                loading
+                  ? "bg-panelAlt text-slate-400"
+                  : source === "live"
+                    ? "bg-up/20 text-up"
+                    : "bg-panelAlt text-slate-400"
+              }`}
+              title={source === "live" ? "Latest market data (Binance / Yahoo)" : "Synthetic demo data"}
+            >
+              {loading ? "Loading…" : source === "live" ? `● Live · ${barsCount} bars` : "● Demo data"}
+            </span>
+          )}
           <span className="hidden text-[11px] text-slate-500 md:block">
             Space play/pause · ←/→ step · Shift+←/→ ×10 · ↑/↓ speed · Esc cancel draw
           </span>
@@ -167,6 +212,8 @@ export default function Home() {
           </div>
         </aside>
       </div>
+
+      {showCalendar && <CalendarView onClose={() => setShowCalendar(false)} />}
     </div>
   );
 }

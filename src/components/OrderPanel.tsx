@@ -23,6 +23,9 @@ export function OrderPanel() {
   const closePosition = useTradingStore((s) => s.closePosition);
   const startingEquity = useTradingStore((s) => s.startingEquity);
   const equity = useTradingStore((s) => s.equity(price));
+  const marginUsed = useTradingStore((s) => s.marginUsed(price));
+  const freeMargin = useTradingStore((s) => s.freeMargin(price));
+  const marginLevel = useTradingStore((s) => s.marginLevel(price));
 
   const [side, setSide] = useState<OrderSide>("long");
   const [type, setType] = useState<OrderType>("market");
@@ -152,6 +155,22 @@ export function OrderPanel() {
         <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
           <span>Starting</span>
           <span>${startingEquity.toFixed(2)}</span>
+        </div>
+        <div className="mb-2 grid grid-cols-3 gap-2 text-[10px]">
+          <div className="rounded bg-panelAlt p-1.5">
+            <div className="text-slate-500">Margin</div>
+            <div className="text-slate-200">${marginUsed.toFixed(2)}</div>
+          </div>
+          <div className="rounded bg-panelAlt p-1.5">
+            <div className="text-slate-500">Free</div>
+            <div className="text-slate-200">${freeMargin.toFixed(2)}</div>
+          </div>
+          <div className="rounded bg-panelAlt p-1.5">
+            <div className="text-slate-500">Level</div>
+            <div className={marginLevel > 0 && marginLevel < 100 ? "text-down" : "text-slate-200"}>
+              {marginLevel > 0 ? `${marginLevel.toFixed(0)}%` : "—"}
+            </div>
+          </div>
         </div>
 
         <div className="text-xs font-semibold text-slate-400">Open positions ({positions.length})</div>
