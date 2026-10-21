@@ -1,0 +1,102 @@
+// Prisma schema for Backtest Lab.
+// Models: User, Account (balance/instrument), Session (replay run), Trade, Tag.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  createdAt DateTime  @default(now())
+  accounts  Account[]
+  sessions  Session[]
+  tags      Tag[]
+}
+
+model Account {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  startingEquity Float     @default(10000)
+  currency       String    @default("USD")
+  createdAt      DateTime  @default(now())
+  sessions       Session[]
+
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  symbol       String
+  timeframe    String
+  // Replay window boundaries (epoch seconds).
+  startTime    Int
+  endTime      Int
+  // Simulation cost model snapshot.
+  spreadPips   Float    @default(0.5)
+  slippagePips Float    @default(0.1)
+  commission   Float    @default(7)
+  status       String   @default("active") // active | completed | archived
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  trades       Trade[]
+
+  @@index([userId])
+  @@index([accountId])
+}
+
+model Trade {
+  id          String    @id @default(cuid())
+  sessionId   String
+  session     Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  symbol      String
+  side        String // long | short
+  lots        Float
+  entryPrice  Float
+  exitPrice   Float
+  entryTime   Int
+  exitTime    Int
+  durationSec Int
+  grossPnl    Float
+  commission  Float
+  slippage    Float
+  netPnl      Float
+  rMultiple   Float?
+  exitReason  String // stop_loss | take_profit | manual | liquidation
+  notes       String?
+  // Data-URL or object-storage key for the auto-captured chart snapshot.
+  snapshotUrl String?
+  createdAt   DateTime  @default(now())
+  tags        Tag[]     @relation("TradeTags")
+
+  @@index([sessionId])
+  @@index([symbol])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String
+  // Semantic grouping: setup | session | emotion | custom
+  category  String   @default("custom")
+  color     String   @default("#3b82f6")
+  createdAt DateTime @default(now())
+  trades    Trade[]  @relation("TradeTags")
+
+  @@unique([userId, label])
+  @@index([userId])
+}
