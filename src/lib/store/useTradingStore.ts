@@ -9,6 +9,7 @@ import type {
 } from "../domain/types";
 import { getInstrument } from "../domain/instruments";
 import {
+  applyFillCosts,
   closePositionAt,
   floatingPnl,
   processBar,
@@ -17,6 +18,7 @@ import type { Candle } from "../domain/types";
 
 let orderSeq = 0;
 const newOrderId = (): string => `ord_${Date.now().toString(36)}_${(orderSeq++).toString(36)}`;
+const newPositionId = (): string => `pos_${Date.now().toString(36)}_${(orderSeq++).toString(36)}`;
 
 export interface SubmitOrderInput {
   symbol: string;
@@ -27,6 +29,8 @@ export interface SubmitOrderInput {
   stopLoss?: number;
   takeProfit?: number;
   atTime: number;
+  /** Current price — fills market orders immediately when provided. */
+  atPrice?: number;
 }
 
 export interface TradingState {
@@ -45,6 +49,11 @@ export interface TradingState {
   setCosts: (costs: Partial<SimulationCosts>) => void;
   submitOrder: (input: SubmitOrderInput) => void;
   cancelOrder: (id: string) => void;
+  /** Attach or change SL/TP on an open position (null clears a level). */
+  updatePositionBrackets: (
+    positionId: string,
+    brackets: { stopLoss?: number | null; takeProfit?: number | null },
+  ) => void;
   /** Feed a freshly revealed base bar through the matching engine. */
   onBar: (bar: Candle) => void;
   closePosition: (positionId: string, price: number, time: number) => void;
@@ -93,6 +102,26 @@ export const useTradingStore = create<TradingState>((set, get) => ({
   setCosts: (costs) => set({ costs: { ...get().costs, ...costs } }),
 
   submitOrder: (input) => {
+    // Market orders fill instantly at the current price; limit/stop stay pending.
+    if (input.type === "market" && input.atPrice) {
+      const spec = getInstrument(input.symbol);
+      const fill = applyFillCosts(spec, input.side, input.atPrice, get().costs);
+      const position: Position = {
+        id: newPositionId(),
+        orderId: newOrderId(),
+        symbol: input.symbol,
+        side: input.side,
+        lots: input.lots,
+        entryPrice: fill,
+        entryTime: input.atTime,
+        stopLoss: input.stopLoss,
+        takeProfit: input.takeProfit,
+        entryCommission: spec.commissionPerLot * input.lots,
+      };
+      set({ positions: [...get().positions, position] });
+      return;
+    }
+
     const order: OrderRequest = {
       id: newOrderId(),
       symbol: input.symbol,
@@ -110,6 +139,19 @@ export const useTradingStore = create<TradingState>((set, get) => ({
 
   cancelOrder: (id) =>
     set({ orders: get().orders.filter((o) => o.id !== id) }),
+
+  updatePositionBrackets: (positionId, brackets) =>
+    set({
+      positions: get().positions.map((p) =>
+        p.id === positionId
+          ? {
+              ...p,
+              stopLoss: brackets.stopLoss === undefined ? p.stopLoss : brackets.stopLoss ?? undefined,
+              takeProfit: brackets.takeProfit === undefined ? p.takeProfit : brackets.takeProfit ?? undefined,
+            }
+          : p,
+      ),
+    }),
 
   onBar: (bar) => {
     const { activeSymbol, orders, positions, costs } = get();

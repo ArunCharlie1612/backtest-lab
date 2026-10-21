@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { XCircle, CalendarDays, Radio } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { XCircle, CalendarDays, Radio, PanelLeftClose, PanelRightClose } from "lucide-react";
 import { Chart } from "@/components/Chart";
 import { ReplayControls } from "@/components/ReplayControls";
 import { DrawingToolbar } from "@/components/DrawingToolbar";
@@ -21,7 +21,7 @@ import { useReplayStore } from "@/lib/store/useReplayStore";
 import { useTradingStore } from "@/lib/store/useTradingStore";
 import { generateSampleSeries } from "@/lib/data/sampleData";
 import { INSTRUMENTS } from "@/lib/domain/instruments";
-import { supportsLive } from "@/lib/live/binanceSocket";
+import { supportsLive, BINANCE_INTERVALS } from "@/lib/live/binanceSocket";
 import type { Candle } from "@/lib/domain/types";
 
 const SYMBOLS = Object.keys(INSTRUMENTS);
@@ -47,7 +47,7 @@ export default function Home() {
   useLiveFeed();
 
   const load = useReplayStore((s) => s.load);
-  const setTimeframe = useReplayStore((s) => s.setTimeframe);
+  const timeframe = useReplayStore((s) => s.timeframe);
   const mode = useReplayStore((s) => s.mode);
   const setMode = useReplayStore((s) => s.setMode);
   const setActiveSymbol = useTradingStore((s) => s.setActiveSymbol);
@@ -59,26 +59,40 @@ export default function Home() {
   const [source, setSource] = useState<"live" | "demo">("demo");
   const [barsCount, setBarsCount] = useState(0);
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showOrders, setShowOrders] = useState(true);
+  const [showAnalytics, setShowAnalytics] = useState(true);
+  const prevSymbol = useRef(symbol);
 
   const liveAvailable = supportsLive(symbol);
 
+  // Fetch native-resolution data for the active symbol + timeframe. Deep
+  // per-timeframe history (not just 1m), so higher timeframes show plenty of bars.
   useEffect(() => {
     let cancelled = false;
     const warmupFor = (len: number) => Math.min(300, Math.max(20, Math.floor(len / 4)));
+    const symbolChanged = prevSymbol.current !== symbol;
+    prevSymbol.current = symbol;
+    const wasLive = useReplayStore.getState().mode === "live";
+
     setLoading(true);
-    useReplayStore.getState().setMode("replay");
-    useTradingStore.getState().clearWorkingState();
+    if (symbolChanged) {
+      useReplayStore.getState().setMode("replay");
+      useTradingStore.getState().clearWorkingState();
+    }
+
+    const interval = BINANCE_INTERVALS[timeframe] ?? "1m";
 
     void (async () => {
       try {
-        const res = await fetch(`/api/candles?symbol=${encodeURIComponent(symbol)}`);
+        const res = await fetch(
+          `/api/candles?symbol=${encodeURIComponent(symbol)}&interval=${interval}`,
+        );
         if (!res.ok) throw new Error(`status ${res.status}`);
-        const data = (await res.json()) as { candles?: Candle[]; interval?: string };
+        const data = (await res.json()) as { candles?: Candle[] };
         const candles = data.candles ?? [];
         if (cancelled) return;
-        if (candles.length < 50) throw new Error("insufficient live data");
+        if (candles.length < 20) throw new Error("insufficient live data");
         load(symbol, candles, warmupFor(candles.length));
-        setTimeframe(data.interval === "1d" ? "1D" : "15m");
         setSource("live");
         setBarsCount(candles.length);
       } catch {
@@ -96,6 +110,10 @@ export default function Home() {
       } finally {
         if (!cancelled) {
           setActiveSymbol(symbol);
+          // Resume live streaming after a timeframe refetch on the same symbol.
+          if (wasLive && !symbolChanged && supportsLive(symbol)) {
+            useReplayStore.getState().setMode("live");
+          }
           setLoading(false);
         }
       }
@@ -104,7 +122,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [symbol, load, setActiveSymbol, setTimeframe]);
+  }, [symbol, timeframe, load, setActiveSymbol]);
 
   const onCloseAll = () => {
     const price = useReplayStore.getState().currentPrice() ?? 0;
@@ -183,6 +201,20 @@ export default function Home() {
           <span className="hidden text-[11px] text-slate-500 md:block">
             Space play/pause · ←/→ step · Shift+←/→ ×10 · ↑/↓ speed · Esc cancel draw
           </span>
+          <button
+            className={`rounded border border-border p-1 ${showOrders ? "text-accent" : "text-slate-500"} hover:text-accent`}
+            onClick={() => setShowOrders((v) => !v)}
+            title="Toggle order panel"
+          >
+            <PanelLeftClose size={14} />
+          </button>
+          <button
+            className={`rounded border border-border p-1 ${showAnalytics ? "text-accent" : "text-slate-500"} hover:text-accent`}
+            onClick={() => setShowAnalytics((v) => !v)}
+            title="Toggle analytics panel"
+          >
+            <PanelRightClose size={14} />
+          </button>
         </div>
       </header>
 
@@ -196,7 +228,7 @@ export default function Home() {
           <ReplayControls />
         </main>
 
-        <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-bg p-3">
+        <aside className="w-80 shrink-0 overflow-y-auto border-l border-border bg-bg p-3" hidden={!showOrders}>
           <div className="flex flex-col gap-3">
             <OrderPanel />
             <SettingsPanel />
@@ -204,7 +236,7 @@ export default function Home() {
           </div>
         </aside>
 
-        <aside className="w-96 shrink-0 overflow-y-auto border-l border-border bg-bg p-3">
+        <aside className="w-96 shrink-0 overflow-y-auto border-l border-border bg-bg p-3" hidden={!showAnalytics}>
           <div className="flex flex-col gap-3">
             <MetricsPanel />
             <EquityCurve />

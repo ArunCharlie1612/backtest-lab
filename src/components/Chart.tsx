@@ -35,6 +35,8 @@ export function Chart() {
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const lastTimeRef = useRef<number>(0);
+  const firstTimeRef = useRef<number>(0);
+  const prevLenRef = useRef<number>(0);
   const draftRef = useRef<{ start: DrawPoint; end: DrawPoint } | null>(null);
 
   const tool = useDrawingStore((s) => s.tool);
@@ -161,26 +163,36 @@ export function Chart() {
     const data = useReplayStore.getState().visibleSeries();
     series.setData(data.map(toBar));
     lastTimeRef.current = data.length ? data[data.length - 1]!.time : 0;
+    firstTimeRef.current = data.length ? data[0]!.time : 0;
+    prevLenRef.current = data.length;
     chartRef.current?.timeScale().fitContent();
     renderOverlay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframe, symbol]);
 
-  // Incremental update on each replay tick.
+  // Incremental update on each replay tick; full redraw when the dataset changes.
   const tick = useReplayStore((s) => s.tick);
   useEffect(() => {
     const series = seriesRef.current;
     if (!series) return;
     const data = useReplayStore.getState().visibleSeries();
     const last = data[data.length - 1];
-    if (!last) return;
-    if (last.time >= lastTimeRef.current) {
+    const first = data[0];
+    if (!last || !first) return;
+
+    const datasetReplaced =
+      first.time !== firstTimeRef.current || data.length < prevLenRef.current;
+    if (datasetReplaced) {
+      series.setData(data.map(toBar));
+      chartRef.current?.timeScale().fitContent();
+    } else if (last.time >= lastTimeRef.current) {
       series.update(toBar(last));
-      lastTimeRef.current = last.time;
     } else {
       series.setData(data.map(toBar));
-      lastTimeRef.current = last.time;
     }
+    firstTimeRef.current = first.time;
+    lastTimeRef.current = last.time;
+    prevLenRef.current = data.length;
     renderOverlay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);

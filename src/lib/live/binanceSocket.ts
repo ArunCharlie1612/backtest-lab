@@ -1,5 +1,7 @@
 "use client";
 
+import type { Timeframe } from "@/lib/domain/types";
+
 /** Crypto symbol → Binance lowercase stream pair. */
 export const BINANCE_WS_PAIRS: Record<string, string> = {
   BTCUSD: "btcusdt",
@@ -9,6 +11,16 @@ export const BINANCE_WS_PAIRS: Record<string, string> = {
   XRPUSD: "xrpusdt",
 };
 
+/** Chart timeframe → Binance kline interval. */
+export const BINANCE_INTERVALS: Record<Timeframe, string> = {
+  "1m": "1m",
+  "5m": "5m",
+  "15m": "15m",
+  "1h": "1h",
+  "4h": "4h",
+  "1D": "1d",
+};
+
 export interface LiveBar {
   time: number;
   open: number;
@@ -16,7 +28,7 @@ export interface LiveBar {
   low: number;
   close: number;
   volume: number;
-  /** True when this 1-minute kline has closed. */
+  /** True when this kline has closed. */
   closed: boolean;
 }
 
@@ -25,19 +37,20 @@ export function supportsLive(symbol: string): boolean {
 }
 
 /**
- * Open a Binance 1-minute kline stream for a symbol. Calls `onBar` on every
- * tick (forming + closed bars) and `onStatus` on connection changes. Returns a
- * disposer. The caller is responsible for reconnection policy via `onStatus`.
+ * Open a Binance kline stream for a symbol at the given interval. Calls `onBar`
+ * on every tick (forming + closed bars) and `onStatus` on connection changes.
+ * Returns a disposer. Reconnection policy is left to the caller via `onStatus`.
  */
 export function openBinanceKlineStream(
   symbol: string,
+  interval: string,
   onBar: (bar: LiveBar) => void,
   onStatus?: (status: "open" | "closed" | "error") => void,
 ): () => void {
   const pair = BINANCE_WS_PAIRS[symbol];
   if (!pair) return () => {};
 
-  const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair}@kline_1m`);
+  const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair}@kline_${interval}`);
 
   ws.onopen = () => onStatus?.("open");
   ws.onerror = () => onStatus?.("error");

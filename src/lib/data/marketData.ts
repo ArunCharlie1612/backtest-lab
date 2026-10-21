@@ -47,12 +47,14 @@ export async function fetchCandles(
   const binancePair = BINANCE_SYMBOLS[symbol];
   if (binancePair) {
     try {
+      // Native-resolution klines give deep per-timeframe history.
       return await fetchBinance(binancePair, interval);
     } catch {
       /* fall through */
     }
   }
-  return fetchYahoo(symbol, interval, range);
+  // Yahoo stays on a 1m base; the client aggregates to the display timeframe.
+  return fetchYahoo(symbol, "1m", range);
 }
 
 // --- Binance ------------------------------------------------------------------
