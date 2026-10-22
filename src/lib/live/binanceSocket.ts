@@ -30,6 +30,8 @@ export interface LiveBar {
   volume: number;
   /** True when this kline has closed. */
   closed: boolean;
+  /** Exchange event time (ms) for latency measurement. */
+  eventTime: number;
 }
 
 export function supportsLive(symbol: string): boolean {
@@ -50,14 +52,14 @@ export function openBinanceKlineStream(
   const pair = BINANCE_WS_PAIRS[symbol];
   if (!pair) return () => {};
 
-  const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair}@kline_${interval}`);
+  const ws = new WebSocket(`wss://data-stream.binance.vision/ws/${pair}@kline_${interval}`);
 
   ws.onopen = () => onStatus?.("open");
   ws.onerror = () => onStatus?.("error");
   ws.onclose = () => onStatus?.("closed");
   ws.onmessage = (ev) => {
     try {
-      const msg = JSON.parse(ev.data as string) as { k?: Record<string, unknown> };
+      const msg = JSON.parse(ev.data as string) as { k?: Record<string, unknown>; E?: number };
       const k = msg.k;
       if (!k) return;
       onBar({
@@ -68,6 +70,7 @@ export function openBinanceKlineStream(
         close: Number(k.c),
         volume: Number(k.v),
         closed: Boolean(k.x),
+        eventTime: Number(msg.E) || Date.now(),
       });
     } catch {
       /* ignore malformed frames */

@@ -9,6 +9,7 @@ import { ChartLegend } from "@/components/ChartLegend";
 import { RsiPane } from "@/components/RsiPane";
 import { SymbolPicker } from "@/components/SymbolPicker";
 import { IndicatorMenu } from "@/components/IndicatorMenu";
+import { LiveHud } from "@/components/LiveHud";
 import { DrawingToolbar } from "@/components/DrawingToolbar";
 import { OrderPanel } from "@/components/OrderPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -180,24 +181,7 @@ export default function Home() {
           <XCircle size={13} /> Close all ({positionsCount})
         </button>
         <div className="ml-auto flex items-center gap-3">
-          {mode === "live" ? (
-            <span className="flex items-center gap-1 rounded bg-down/20 px-2 py-0.5 text-[10px] font-semibold text-down">
-              <Radio size={11} className="animate-pulse" /> STREAMING
-            </span>
-          ) : (
-            <span
-              className={`rounded px-2 py-0.5 text-[10px] font-semibold ${
-                loading
-                  ? "bg-panelAlt text-slate-400"
-                  : source === "live"
-                    ? "bg-up/20 text-up"
-                    : "bg-panelAlt text-slate-400"
-              }`}
-              title={source === "live" ? "Latest market data (Binance / Yahoo)" : "Synthetic demo data"}
-            >
-              {loading ? "Loading…" : source === "live" ? `● Live · ${barsCount} bars` : "● Demo data"}
-            </span>
-          )}
+          <LiveHud mode={mode} loading={loading} source={source} barsCount={barsCount} />
           <span className="hidden text-[11px] text-slate-500 md:block">
             Space play/pause · ←/→ step · Shift+←/→ ×10 · ↑/↓ speed · Esc cancel draw
           </span>

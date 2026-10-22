@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useReplayStore } from "@/lib/store/useReplayStore";
 import { useTradingStore } from "@/lib/store/useTradingStore";
+import { useLiveStatusStore } from "@/lib/store/useLiveStatusStore";
 import {
   BINANCE_INTERVALS,
   openBinanceKlineStream,
@@ -53,6 +54,7 @@ export function useLiveFeed(): void {
 
       const handle = (b: LiveBar) => {
         if (b.closed) backoff = 1000;
+        useLiveStatusStore.getState().setLatency(Date.now() - b.eventTime);
         feedBar({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }, b.closed);
       };
       const connect = () => {

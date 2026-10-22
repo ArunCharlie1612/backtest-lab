@@ -68,9 +68,9 @@ export const useReplayStore = create<ReplayState>()(
     baseSeries: [],
     cursor: -1,
     status: "idle",
-    mode: "replay",
+    mode: "live",
     speed: 1,
-    timeframe: "15m",
+    timeframe: "5m",
     tick: 0,
 
     load: (symbol, baseSeries, warmupBars = 200) => {

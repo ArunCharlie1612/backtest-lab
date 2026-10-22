@@ -40,6 +40,7 @@ export function Chart() {
   const lastTimeRef = useRef<number>(0);
   const firstTimeRef = useRef<number>(0);
   const prevLenRef = useRef<number>(0);
+  const followRef = useRef<boolean>(true);
   const draftRef = useRef<{ start: DrawPoint; end: DrawPoint } | null>(null);
 
   const tool = useDrawingStore((s) => s.tool);
@@ -197,11 +198,29 @@ export function Chart() {
     const onRange = () => renderOverlay();
     chart.timeScale().subscribeVisibleTimeRangeChange(onRange);
 
+    // Follow real-time only while the user is at the right edge; dragging back
+    // disables auto-scroll until they return to the latest bar.
+    const onLogical = () => {
+      const range = chart.timeScale().getVisibleLogicalRange();
+      if (range) followRef.current = range.to >= prevLenRef.current - 2;
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onLogical);
+
+    // In replay mode, clicking a bar cuts the series off at that candle.
+    const onClick = (param: { time?: unknown }) => {
+      if (useReplayStore.getState().mode !== "replay") return;
+      const t = typeof param.time === "number" ? param.time : null;
+      if (t != null) useReplayStore.getState().jumpToTime(t);
+    };
+    chart.subscribeClick(onClick);
+
     const ro = new ResizeObserver(() => renderOverlay());
     ro.observe(el);
 
     return () => {
       chart.timeScale().unsubscribeVisibleTimeRangeChange(onRange);
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onLogical);
+      chart.unsubscribeClick(onClick);
       ro.disconnect();
       chart.remove();
       registerChart(null, null);
@@ -229,7 +248,12 @@ export function Chart() {
     lastTimeRef.current = data.length ? data[data.length - 1]!.time : 0;
     firstTimeRef.current = data.length ? data[0]!.time : 0;
     prevLenRef.current = data.length;
-    chartRef.current?.timeScale().fitContent();
+    if (useReplayStore.getState().mode === "live") {
+      followRef.current = true;
+      chartRef.current?.timeScale().scrollToRealTime();
+    } else {
+      chartRef.current?.timeScale().fitContent();
+    }
     renderOverlay();
     syncIndicators();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -258,10 +282,23 @@ export function Chart() {
     firstTimeRef.current = first.time;
     lastTimeRef.current = last.time;
     prevLenRef.current = data.length;
+    // Keep the latest candle in view while live and following.
+    if (useReplayStore.getState().mode === "live" && followRef.current) {
+      chartRef.current?.timeScale().scrollToRealTime();
+    }
     renderOverlay();
     syncIndicators();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
+
+  // Snap to the live candle whenever live mode is (re-)entered.
+  const mode = useReplayStore((s) => s.mode);
+  useEffect(() => {
+    if (mode === "live") {
+      followRef.current = true;
+      chartRef.current?.timeScale().scrollToRealTime();
+    }
+  }, [mode]);
 
   // Open-position price lines.
   const positions = useTradingStore((s) => s.positions);

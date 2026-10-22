@@ -7,6 +7,7 @@ import {
   StepBack,
   SkipForward,
   Gauge,
+  Zap,
 } from "lucide-react";
 import { useReplayStore } from "@/lib/store/useReplayStore";
 import type { Timeframe } from "@/lib/domain/types";
@@ -41,6 +42,7 @@ export function ReplayControls() {
   const stepBackward = useReplayStore((s) => s.stepBackward);
   const setSpeed = useReplayStore((s) => s.setSpeed);
   const setTimeframe = useReplayStore((s) => s.setTimeframe);
+  const setMode = useReplayStore((s) => s.setMode);
   const jumpToTime = useReplayStore((s) => s.jumpToTime);
 
   // tick dependency keeps progress/time readouts live.
@@ -62,6 +64,22 @@ export function ReplayControls() {
   return (
     <div className="flex flex-col gap-2 border-t border-border bg-panel px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
+        {isLive ? (
+          <button
+            className="flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-400"
+            disabled
+          >
+            <Zap size={13} /> Streaming live
+          </button>
+        ) : (
+          <button
+            className="flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20"
+            onClick={() => setMode("live")}
+            title="Flush the replay buffer and snap back to the live candle"
+          >
+            <Zap size={13} /> Jump to Live
+          </button>
+        )}
         <button className="btn" onClick={() => stepBackward(1)} title="Step back 1 bar" disabled={isLive}>
           <StepBack size={16} />
         </button>

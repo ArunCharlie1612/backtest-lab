@@ -81,7 +81,7 @@ async function fetchBinance(pair: string, interval: string, pages = 6): Promise<
 
   for (let p = 0; p < pages; p++) {
     const url =
-      `https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${interval}` +
+      `https://data-api.binance.vision/api/v3/klines?symbol=${pair}&interval=${interval}` +
       `&limit=1000&endTime=${endTime}`;
     const res = await timedFetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`Binance ${res.status}`);
