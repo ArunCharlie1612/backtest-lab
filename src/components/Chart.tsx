@@ -20,7 +20,7 @@ import { sma, ema, bollinger, vwap } from "@/lib/indicators/indicators";
 import { getInstrument } from "@/lib/domain/instruments";
 import { TIMEFRAME_SECONDS } from "@/lib/domain/types";
 
-const SINGLE_POINT_TOOLS = new Set(["horizontal"]);
+const SINGLE_POINT_TOOLS = new Set(["horizontal", "ray", "vertical", "text"]);
 
 /**
  * Charting surface on Lightweight Charts with an interactive drawing overlay.
@@ -42,6 +42,7 @@ export function Chart() {
   const prevLenRef = useRef<number>(0);
   const followRef = useRef<boolean>(true);
   const draftRef = useRef<{ start: DrawPoint; end: DrawPoint } | null>(null);
+  const brushRef = useRef<DrawPoint[] | null>(null);
 
   const tool = useDrawingStore((s) => s.tool);
 
@@ -91,18 +92,22 @@ export function Chart() {
       spec,
     };
 
-    const drawings = useDrawingStore.getState().drawings;
-    const activeTool = useDrawingStore.getState().tool;
-    const draft = draftRef.current
-      ? {
-          id: "draft",
-          tool: activeTool,
-          color: useDrawingStore.getState().color,
-          points: SINGLE_POINT_TOOLS.has(activeTool)
-            ? [draftRef.current.start]
-            : [draftRef.current.start, draftRef.current.end],
-        }
-      : null;
+    const dstore = useDrawingStore.getState();
+    const drawings = dstore.hidden ? [] : dstore.drawings;
+    const activeTool = dstore.tool;
+    let draft = null;
+    if (brushRef.current && brushRef.current.length > 0) {
+      draft = { id: "draft", tool: "brush" as const, color: dstore.color, points: brushRef.current };
+    } else if (draftRef.current) {
+      draft = {
+        id: "draft",
+        tool: activeTool,
+        color: dstore.color,
+        points: SINGLE_POINT_TOOLS.has(activeTool)
+          ? [draftRef.current.start]
+          : [draftRef.current.start, draftRef.current.end],
+      };
+    }
     renderDrawings(ctx, drawings, draft, rc);
   };
 
@@ -339,8 +344,20 @@ export function Chart() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const time = xToTime(x) ?? useReplayStore.getState().currentTime() ?? 0;
-    const price = yToPrice(y);
+    let price = yToPrice(y);
     if (price == null) return null;
+    // Magnet: snap to the nearest OHLC of the bar under the cursor.
+    if (useDrawingStore.getState().magnet) {
+      const data = useReplayStore.getState().visibleSeries();
+      const bar = data.reduce<null | (typeof data)[number]>((best, b) => {
+        if (!best) return b;
+        return Math.abs(b.time - time) < Math.abs(best.time - time) ? b : best;
+      }, null);
+      if (bar) {
+        const levels = [bar.open, bar.high, bar.low, bar.close];
+        price = levels.reduce((a, b) => (Math.abs(b - price!) < Math.abs(a - price!) ? b : a));
+      }
+    }
     return { time, price };
   };
 
@@ -349,26 +366,53 @@ export function Chart() {
     const p = pointAt(e);
     if (!p) return;
     overlayRef.current?.setPointerCapture(e.pointerId);
-    draftRef.current = { start: p, end: p };
+    if (tool === "brush") {
+      brushRef.current = [p];
+    } else {
+      draftRef.current = { start: p, end: p };
+    }
     renderOverlay();
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (tool === "cursor" || !draftRef.current) return;
+    if (tool === "cursor") return;
     const p = pointAt(e);
     if (!p) return;
+    if (tool === "brush" && brushRef.current) {
+      brushRef.current.push(p);
+      renderOverlay();
+      return;
+    }
+    if (!draftRef.current) return;
     draftRef.current.end = p;
     renderOverlay();
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (tool === "cursor" || !draftRef.current) return;
+    if (tool === "cursor") return;
     overlayRef.current?.releasePointerCapture(e.pointerId);
-    const { start, end } = draftRef.current;
     const store = useDrawingStore.getState();
-    const points = SINGLE_POINT_TOOLS.has(tool) ? [start] : [start, end];
-    store.addDrawing(tool, points);
+
+    if (tool === "brush") {
+      const path = brushRef.current;
+      brushRef.current = null;
+      if (path && path.length > 1) store.addDrawing("brush", path);
+      store.setTool("cursor");
+      renderOverlay();
+      return;
+    }
+
+    if (!draftRef.current) return;
+    const { start, end } = draftRef.current;
     draftRef.current = null;
+
+    if (tool === "text") {
+      const text = window.prompt("Text:")?.trim();
+      if (text) store.addDrawing("text", [start], { text });
+    } else {
+      const points = SINGLE_POINT_TOOLS.has(tool) ? [start] : [start, end];
+      store.addDrawing(tool, points);
+    }
     store.setTool("cursor"); // return to cursor so chart stays interactive
     renderOverlay();
   };

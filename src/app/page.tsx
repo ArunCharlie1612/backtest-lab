@@ -116,8 +116,10 @@ export default function Home() {
       } finally {
         if (!cancelled) {
           setActiveSymbol(symbol);
-          // Resume live streaming after a timeframe refetch on the same symbol.
-          if (wasLive && !symbolChanged && supportsLive(symbol)) {
+          // Stay live across symbol/timeframe switches when the new symbol
+          // supports a live feed (keyless Binance or keyed FX).
+          const canLive = supportsLive(symbol) || keyedSymbols.includes(symbol);
+          if (wasLive && canLive) {
             useReplayStore.getState().setMode("live");
           }
           setLoading(false);
@@ -128,7 +130,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [symbol, timeframe, load, setActiveSymbol]);
+  }, [symbol, timeframe, load, setActiveSymbol, keyedSymbols]);
 
   const onCloseAll = () => {
     const price = useReplayStore.getState().currentPrice() ?? 0;

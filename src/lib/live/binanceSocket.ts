@@ -9,6 +9,9 @@ export const BINANCE_WS_PAIRS: Record<string, string> = {
   SOLUSD: "solusdt",
   BNBUSD: "bnbusdt",
   XRPUSD: "xrpusdt",
+  // Keyless FX/metal proxies (live gold + EUR major).
+  XAUUSD: "paxgusdt",
+  EURUSD: "eurusdt",
 };
 
 /** Chart timeframe → Binance kline interval. */

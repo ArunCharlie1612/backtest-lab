@@ -24,6 +24,10 @@ const BINANCE_SYMBOLS: Record<string, string> = {
   SOLUSD: "SOLUSDT",
   BNBUSD: "BNBUSDT",
   XRPUSD: "XRPUSDT",
+  // Keyless FX/metal proxies: PAX Gold ≈ XAU/USD; EUR vs USDT ≈ EUR/USD.
+  // (Only liquid Binance pairs — GBP/JPY use the keyed provider / Yahoo.)
+  XAUUSD: "PAXGUSDT",
+  EURUSD: "EURUSDT",
 };
 
 const BROWSER_UA =

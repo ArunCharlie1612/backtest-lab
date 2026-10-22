@@ -33,8 +33,23 @@ function renderOne(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx, draf
     case "horizontal":
       drawHorizontal(ctx, d, c);
       break;
+    case "ray":
+      drawRay(ctx, d, c);
+      break;
+    case "vertical":
+      drawVertical(ctx, d, c);
+      break;
     case "trendline":
       drawTrendline(ctx, d, c);
+      break;
+    case "arrow":
+      drawTrendline(ctx, d, c, true);
+      break;
+    case "brush":
+      drawBrush(ctx, d, c);
+      break;
+    case "text":
+      drawText(ctx, d, c);
       break;
     case "fib":
       drawFib(ctx, d, c);
@@ -71,15 +86,91 @@ function drawHorizontal(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx)
   label(ctx, c.width - 70, y, p.price.toFixed(c.spec?.pricePrecision ?? 2), d.color);
 }
 
-function drawTrendline(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx): void {
+function drawTrendline(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx, arrow = false): void {
   const [a, b] = d.points;
   if (!a || !b) return;
   const x0 = px(c, a.time, 0);
   const x1 = px(c, b.time, c.width);
+  const y0 = py(c, a.price);
+  const y1 = py(c, b.price);
   ctx.strokeStyle = d.color;
   ctx.lineWidth = 1.5;
   ctx.setLineDash([]);
-  line(ctx, x0, py(c, a.price), x1, py(c, b.price));
+  line(ctx, x0, y0, x1, y1);
+  if (arrow) drawArrowHead(ctx, x0, y0, x1, y1, d.color);
+}
+
+function drawRay(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx): void {
+  // Horizontal ray: from the anchor's time/price extending to the right edge.
+  const p = d.points[0];
+  if (!p) return;
+  const y = py(c, p.price);
+  const x0 = px(c, p.time, 0);
+  ctx.strokeStyle = d.color;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([]);
+  line(ctx, x0, y, c.width, y);
+  label(ctx, x0 + 2, y, p.price.toFixed(c.spec?.pricePrecision ?? 2), d.color);
+}
+
+function drawVertical(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx): void {
+  const p = d.points[0];
+  if (!p) return;
+  const x = px(c, p.time, c.width / 2);
+  ctx.strokeStyle = d.color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  line(ctx, x, 0, x, c.height);
+  ctx.setLineDash([]);
+}
+
+function drawBrush(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx): void {
+  if (d.points.length < 2) return;
+  ctx.strokeStyle = d.color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  d.points.forEach((p, i) => {
+    const x = px(c, p.time, 0);
+    const y = py(c, p.price);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+}
+
+function drawText(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx): void {
+  const p = d.points[0];
+  if (!p || !d.text) return;
+  const x = px(c, p.time, 10);
+  const y = py(c, p.price);
+  ctx.font = "13px ui-sans-serif, system-ui, sans-serif";
+  const w = ctx.measureText(d.text).width + 10;
+  ctx.fillStyle = "rgba(18,23,34,0.9)";
+  ctx.fillRect(x, y - 10, w, 20);
+  ctx.fillStyle = d.color;
+  ctx.fillText(d.text, x + 5, y);
+  ctx.font = "11px ui-monospace, monospace";
+}
+
+function drawArrowHead(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  color: string,
+): void {
+  const angle = Math.atan2(y1 - y0, x1 - x0);
+  const size = 9;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - size * Math.cos(angle - Math.PI / 6), y1 - size * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x1 - size * Math.cos(angle + Math.PI / 6), y1 - size * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
 }
 
 function drawFib(ctx: CanvasRenderingContext2D, d: Drawing, c: RenderCtx): void {
