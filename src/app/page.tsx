@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { XCircle, CalendarDays, Radio, PanelLeftClose, PanelRightClose } from "lucide-react";
 import { Chart } from "@/components/Chart";
 import { ReplayControls } from "@/components/ReplayControls";
+import { CandleTimer } from "@/components/CandleTimer";
 import { DrawingToolbar } from "@/components/DrawingToolbar";
 import { OrderPanel } from "@/components/OrderPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -17,6 +18,7 @@ import { useKeyboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts";
 import { useLocalPersistence } from "@/lib/hooks/useLocalPersistence";
 import { useTradeSnapshots } from "@/lib/hooks/useTradeSnapshots";
 import { useLiveFeed } from "@/lib/hooks/useLiveFeed";
+import { useMarketConfig } from "@/lib/hooks/useMarketConfig";
 import { useReplayStore } from "@/lib/store/useReplayStore";
 import { useTradingStore } from "@/lib/store/useTradingStore";
 import { generateSampleSeries } from "@/lib/data/sampleData";
@@ -45,6 +47,7 @@ export default function Home() {
   useLocalPersistence();
   useTradeSnapshots();
   useLiveFeed();
+  const { keyedSymbols } = useMarketConfig();
 
   const load = useReplayStore((s) => s.load);
   const timeframe = useReplayStore((s) => s.timeframe);
@@ -63,7 +66,7 @@ export default function Home() {
   const [showAnalytics, setShowAnalytics] = useState(true);
   const prevSymbol = useRef(symbol);
 
-  const liveAvailable = supportsLive(symbol);
+  const liveAvailable = supportsLive(symbol) || keyedSymbols.includes(symbol);
 
   // Fetch native-resolution data for the active symbol + timeframe. Deep
   // per-timeframe history (not just 1m), so higher timeframes show plenty of bars.
@@ -222,8 +225,9 @@ export default function Home() {
         <DrawingToolbar />
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1">
+          <div className="relative min-h-0 flex-1">
             <Chart />
+            <CandleTimer />
           </div>
           <ReplayControls />
         </main>

@@ -1,4 +1,5 @@
 import type { Candle } from "@/lib/domain/types";
+import { fetchTwelveDataCandles, supportsKeyed } from "./marketDataProxy";
 
 /**
  * Keyless market-data providers (server-side, to avoid CORS):
@@ -31,7 +32,7 @@ const BROWSER_UA =
 export interface CandleResult {
   candles: Candle[];
   source: "live";
-  provider: "binance" | "yahoo";
+  provider: "binance" | "yahoo" | "twelvedata";
   interval: "1m" | "1d";
   resolvedSymbol: string;
 }
@@ -53,6 +54,17 @@ export async function fetchCandles(
       /* fall through */
     }
   }
+
+  // Keyed FX/metals provider (Twelve Data) at native resolution, when configured.
+  if (supportsKeyed(symbol)) {
+    try {
+      const { candles, resolvedSymbol } = await fetchTwelveDataCandles(symbol, interval);
+      return { candles, source: "live", provider: "twelvedata", interval: "1m", resolvedSymbol };
+    } catch {
+      /* fall through to Yahoo */
+    }
+  }
+
   // Yahoo stays on a 1m base; the client aggregates to the display timeframe.
   return fetchYahoo(symbol, "1m", range);
 }

@@ -10,12 +10,22 @@ import {
   type LiveBar,
 } from "@/lib/live/binanceSocket";
 
+interface SseBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  closed?: boolean;
+  error?: string;
+}
+
 /**
- * Connects the Binance live kline stream when the store is in live mode, at the
- * active chart timeframe's interval so live bars share the historical series'
- * resolution. Forming ticks update the chart's last bar; closed bars are fed to
- * the paper-trading engine so pending orders and brackets resolve on live data.
- * Re-subscribes on symbol/timeframe change and auto-reconnects with backoff.
+ * Live feed for the active symbol in live mode:
+ *  - Crypto → Binance kline WebSocket at the active timeframe's interval.
+ *  - Keyed FX/metals → server SSE proxy (/api/stream); the key stays server-side.
+ * Forming ticks update the chart's last bar; closed bars feed the paper engine.
+ * Re-subscribes on symbol/timeframe change and reconnects with backoff.
  */
 export function useLiveFeed(): void {
   const mode = useReplayStore((s) => s.mode);
@@ -23,37 +33,57 @@ export function useLiveFeed(): void {
   const timeframe = useReplayStore((s) => s.timeframe);
 
   useEffect(() => {
-    if (mode !== "live" || !supportsLive(symbol)) return;
-    const interval = BINANCE_INTERVALS[timeframe];
+    if (mode !== "live") return;
 
-    let disposed = false;
-    let dispose = () => {};
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let backoff = 1000;
+    const feedBar = (
+      bar: { time: number; open: number; high: number; low: number; close: number; volume?: number },
+      closed: boolean,
+    ) => {
+      useReplayStore.getState().liveTick(bar, closed);
+      if (closed) useTradingStore.getState().onBar(bar);
+    };
 
-    const handleBar = (b: LiveBar) => {
-      const bar = { time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume };
-      useReplayStore.getState().liveTick(bar, b.closed);
-      if (b.closed) {
-        backoff = 1000;
-        useTradingStore.getState().onBar(bar);
+    // Crypto via Binance WebSocket at the active timeframe's interval.
+    if (supportsLive(symbol)) {
+      const interval = BINANCE_INTERVALS[timeframe];
+      let disposed = false;
+      let dispose = () => {};
+      let retry: ReturnType<typeof setTimeout> | undefined;
+      let backoff = 1000;
+
+      const handle = (b: LiveBar) => {
+        if (b.closed) backoff = 1000;
+        feedBar({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }, b.closed);
+      };
+      const connect = () => {
+        dispose = openBinanceKlineStream(symbol, interval, handle, (status) => {
+          if (status === "closed" && !disposed) {
+            retry = setTimeout(connect, backoff);
+            backoff = Math.min(backoff * 2, 15000);
+          }
+        });
+      };
+      connect();
+      return () => {
+        disposed = true;
+        if (retry) clearTimeout(retry);
+        dispose();
+      };
+    }
+
+    // Keyed FX/metals via server-sent events (API key hidden server-side).
+    const es = new EventSource(
+      `/api/stream?symbol=${encodeURIComponent(symbol)}&timeframe=${timeframe}`,
+    );
+    es.onmessage = (ev) => {
+      try {
+        const b = JSON.parse(ev.data) as SseBar;
+        if (b.error) return;
+        feedBar({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close }, Boolean(b.closed));
+      } catch {
+        /* ignore malformed frames */
       }
     };
-
-    const connect = () => {
-      dispose = openBinanceKlineStream(symbol, interval, handleBar, (status) => {
-        if (status === "closed" && !disposed) {
-          retry = setTimeout(connect, backoff);
-          backoff = Math.min(backoff * 2, 15000);
-        }
-      });
-    };
-
-    connect();
-    return () => {
-      disposed = true;
-      if (retry) clearTimeout(retry);
-      dispose();
-    };
+    return () => es.close();
   }, [mode, symbol, timeframe]);
 }
