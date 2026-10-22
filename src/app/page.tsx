@@ -5,6 +5,10 @@ import { XCircle, CalendarDays, Radio, PanelLeftClose, PanelRightClose } from "l
 import { Chart } from "@/components/Chart";
 import { ReplayControls } from "@/components/ReplayControls";
 import { CandleTimer } from "@/components/CandleTimer";
+import { ChartLegend } from "@/components/ChartLegend";
+import { RsiPane } from "@/components/RsiPane";
+import { SymbolPicker } from "@/components/SymbolPicker";
+import { IndicatorMenu } from "@/components/IndicatorMenu";
 import { DrawingToolbar } from "@/components/DrawingToolbar";
 import { OrderPanel } from "@/components/OrderPanel";
 import { SettingsPanel } from "@/components/SettingsPanel";
@@ -22,11 +26,9 @@ import { useMarketConfig } from "@/lib/hooks/useMarketConfig";
 import { useReplayStore } from "@/lib/store/useReplayStore";
 import { useTradingStore } from "@/lib/store/useTradingStore";
 import { generateSampleSeries } from "@/lib/data/sampleData";
-import { INSTRUMENTS } from "@/lib/domain/instruments";
 import { supportsLive, BINANCE_INTERVALS } from "@/lib/live/binanceSocket";
 import type { Candle } from "@/lib/domain/types";
 
-const SYMBOLS = Object.keys(INSTRUMENTS);
 
 const START_PRICE: Record<string, number> = {
   EURUSD: 1.1,
@@ -135,17 +137,12 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center gap-4 border-b border-border bg-panel px-4 py-2">
+      <header className="flex items-center gap-3 border-b border-border bg-panel px-4 py-2">
         <h1 className="text-sm font-bold tracking-wide text-slate-100">
           Backtest Lab<span className="text-accent"> ▸</span> Bar Replay
         </h1>
-        <select className="select" value={symbol} onChange={(e) => setSymbol(e.target.value)}>
-          {SYMBOLS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <SymbolPicker symbol={symbol} onChange={setSymbol} />
+        <IndicatorMenu />
 
         {/* Replay / Live mode toggle */}
         <div className="flex items-center overflow-hidden rounded-md border border-border text-xs">
@@ -227,8 +224,10 @@ export default function Home() {
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             <Chart />
+            <ChartLegend />
             <CandleTimer />
           </div>
+          <RsiPane />
           <ReplayControls />
         </main>
 

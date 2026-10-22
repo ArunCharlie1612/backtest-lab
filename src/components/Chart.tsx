@@ -13,8 +13,10 @@ import {
 import { useReplayStore } from "@/lib/store/useReplayStore";
 import { useTradingStore } from "@/lib/store/useTradingStore";
 import { useDrawingStore, type DrawPoint } from "@/lib/store/useDrawingStore";
+import { useIndicatorStore } from "@/lib/store/useIndicatorStore";
 import { registerChart } from "@/lib/chart/registry";
 import { renderDrawings, type RenderCtx } from "@/lib/chart/drawingRenderer";
+import { sma, ema, bollinger, vwap } from "@/lib/indicators/indicators";
 import { getInstrument } from "@/lib/domain/instruments";
 import { TIMEFRAME_SECONDS } from "@/lib/domain/types";
 
@@ -34,6 +36,7 @@ export function Chart() {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const indSeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const lastTimeRef = useRef<number>(0);
   const firstTimeRef = useRef<number>(0);
   const prevLenRef = useRef<number>(0);
@@ -102,6 +105,67 @@ export function Chart() {
     renderDrawings(ctx, drawings, draft, rc);
   };
 
+  // Create/update/remove overlay indicator line series from the indicator store.
+  const syncIndicators = () => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const data = useReplayStore.getState().visibleSeries();
+    const map = indSeriesRef.current;
+
+    const ensure = (id: string, color: string, width: 1 | 2 = 1): ISeriesApi<"Line"> => {
+      let s = map.get(id);
+      if (!s) {
+        s = chart.addLineSeries({
+          color,
+          lineWidth: width,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        map.set(id, s);
+      }
+      return s;
+    };
+    const drop = (id: string) => {
+      const s = map.get(id);
+      if (s) {
+        chart.removeSeries(s);
+        map.delete(id);
+      }
+    };
+    const toLine = (pts: { time: number; value: number }[]) =>
+      pts.map((p) => ({ time: p.time as never, value: p.value }));
+
+    const ind = useIndicatorStore.getState();
+
+    if (ind.sma.enabled) ensure("sma", ind.sma.color).setData(toLine(sma(data, ind.sma.period)));
+    else drop("sma");
+
+    if (ind.ema.enabled) ensure("ema", ind.ema.color).setData(toLine(ema(data, ind.ema.period)));
+    else drop("ema");
+
+    if (ind.vwap.enabled) ensure("vwap", ind.vwap.color).setData(toLine(vwap(data)));
+    else drop("vwap");
+
+    if (ind.bollinger.enabled) {
+      const bb = bollinger(data, ind.bollinger.period, ind.bollinger.mult);
+      ensure("bb_mid", ind.bollinger.color).setData(toLine(bb.middle));
+      ensure("bb_up", ind.bollinger.color).setData(toLine(bb.upper));
+      ensure("bb_low", ind.bollinger.color).setData(toLine(bb.lower));
+    } else {
+      drop("bb_mid");
+      drop("bb_up");
+      drop("bb_low");
+    }
+  };
+
+  // Keep indicators in sync when their settings change.
+  useEffect(() => {
+    const unsub = useIndicatorStore.subscribe(() => syncIndicators());
+    return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Create chart once.
   useEffect(() => {
     const el = chartElRef.current;
@@ -167,6 +231,7 @@ export function Chart() {
     prevLenRef.current = data.length;
     chartRef.current?.timeScale().fitContent();
     renderOverlay();
+    syncIndicators();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeframe, symbol]);
 
@@ -194,6 +259,7 @@ export function Chart() {
     lastTimeRef.current = last.time;
     prevLenRef.current = data.length;
     renderOverlay();
+    syncIndicators();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
 
